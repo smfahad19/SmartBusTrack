@@ -54,18 +54,35 @@ async function initDB(options = {}) {
   if (typeof options === 'string') options = {};
   const schema = options.schema || process.env.PGSCHEMA || 'public';
   if (!/^[a-z_][a-z0-9_]*$/i.test(schema)) throw new Error('Invalid PostgreSQL schema name.');
-  if (pool) await pool.end().catch(() => {});
-  pool = new Pool({
-    host: process.env.PGHOST,
-    port: Number(process.env.PGPORT || 5432),
-    database: process.env.PGDATABASE,
-    user: process.env.PGUSER,
-    password: process.env.PGPASSWORD,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-    max: Number(process.env.DB_POOL_MAX || 10),
-    connectionTimeoutMillis: 5000,
-    options: '-c search_path=' + schema,
-  });
+  if (pool) await pool.end().catch(() => { });
+
+  const isSupabase = (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('supabase')) ||
+    (process.env.PGHOST && process.env.PGHOST.includes('supabase'));
+  const useSSL = process.env.DB_SSL === 'true' || isSupabase || (process.env.DB_SSL !== 'false' && Boolean(process.env.DATABASE_URL));
+
+  const poolConfig = {
+    max: Number(process.env.DB_POOL_MAX || 1), // serverless mein chota pool
+    connectionTimeoutMillis: 10000,
+  };
+
+  // Supabase pooler "options" startup parameter support nahi karta
+  if (schema !== 'public') poolConfig.options = '-c search_path=' + schema;
+
+  if (useSSL) {
+    poolConfig.ssl = { rejectUnauthorized: false };
+  }
+
+  if (process.env.DATABASE_URL) {
+    poolConfig.connectionString = process.env.DATABASE_URL;
+  } else {
+    poolConfig.host = process.env.PGHOST;
+    poolConfig.port = Number(process.env.PGPORT || 5432);
+    poolConfig.database = process.env.PGDATABASE;
+    poolConfig.user = process.env.PGUSER;
+    poolConfig.password = process.env.PGPASSWORD;
+  }
+
+  pool = new Pool(poolConfig);
   pool.on('error', error => console.error('Unexpected PostgreSQL pool error:', error.message));
   const root = adapter(pool, async () => { const active = pool; pool = null; db = null; await active.end(); });
   await pool.query('CREATE SCHEMA IF NOT EXISTS "' + schema + '"');

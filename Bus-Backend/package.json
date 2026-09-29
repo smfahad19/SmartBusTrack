@@ -8,13 +8,16 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "db:check": "node check_db.js",
-    "db:migrate": "node migrateToPostgres.js"
+    "db:migrate": "node migrateToPostgres.js",
+    "db:export:supabase": "node exportToSupabase.js",
+    "db:migrate:supabase": "node migrateToSupabase.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -32,7 +35,6 @@
     "lib": "lib",
     "test": "tests"
   },
-  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Tahanawaz/Bus-Backend.git"
