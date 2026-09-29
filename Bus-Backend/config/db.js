@@ -2,6 +2,9 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { Pool, types } = require('pg');
 
+let bcrypt;
+try { bcrypt = require('bcryptjs'); } catch { bcrypt = require('bcrypt'); }
+
 types.setTypeParser(20, value => Number(value));
 
 let pool;
@@ -47,6 +50,25 @@ async function withWrite(fn) {
     throw error;
   } finally {
     client.release();
+  }
+}
+
+// Agar koi superadmin nahi hai to env variables se automatically bana do
+async function seedSuperadmin(root) {
+  const email = (process.env.SEED_ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD || '';
+  if (!email || !password) return;
+  try {
+    const existing = await root.get("SELECT id FROM users WHERE role='superadmin' LIMIT 1");
+    if (existing) return;
+    const hash = await bcrypt.hash(password, 10);
+    await root.run(
+      "INSERT INTO users (name,email,password,role,must_change_password,status) VALUES (?,?,?,'superadmin',0,'active') ON CONFLICT (email) DO NOTHING",
+      process.env.SEED_ADMIN_NAME || 'Super Admin', email, hash
+    );
+    console.log('Superadmin seeded:', email);
+  } catch (err) {
+    console.error('Superadmin seed failed:', err.message);
   }
 }
 
@@ -180,6 +202,7 @@ async function initDB(options = {}) {
   `);
   await root.run("INSERT INTO app_settings(key,value) VALUES ('jwt_secret',?) ON CONFLICT (key) DO NOTHING", crypto.randomBytes(48).toString('hex'));
   secret = process.env.JWT_SECRET || (await root.get("SELECT value FROM app_settings WHERE key='jwt_secret'")).value;
+  await seedSuperadmin(root);
   db = root;
   return db;
 }
