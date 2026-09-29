@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { io } from 'socket.io-client';
-export const API_URL = String(import.meta.env.VITE_API_URL || '').replace(/\/$/,'');
+export const API_URL = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const SOCKET_URL = String(import.meta.env.VITE_SOCKET_URL || '').replace(/\/$/, '');
 const requestInterceptor = axios.interceptors.request.use(config => {
   if (String(config.url).startsWith('http://localhost:5001/api/')) config.url = config.url.replace('http://localhost:5001', API_URL);
   if (!String(config.url).startsWith(API_URL + '/api/')) return config;
@@ -38,12 +39,18 @@ export const api = {
   delete: path => axios.delete(API_URL + '/api' + path),
 };
 export function connectSocket() {
-  const socket = io(API_URL || window.location.origin, { auth: callback => callback({ token: localStorage.getItem('token') }) });
+  // Vercel par websocket nahi chalta: VITE_SOCKET_URL na ho to socket connect nahi hoga
+  const socketEnabled = Boolean(SOCKET_URL);
+  const socket = io(SOCKET_URL || API_URL || window.location.origin, {
+    autoConnect: socketEnabled,
+    reconnection: socketEnabled,
+    auth: callback => callback({ token: localStorage.getItem('token') }),
+  });
   socket.on('disconnect', reason => {
-    if (reason === 'io server disconnect') api.get('/auth/me').then(() => socket.connect()).catch(() => {});
+    if (reason === 'io server disconnect') api.get('/auth/me').then(() => socket.connect()).catch(() => { });
   });
   socket.on('connect_error', error => {
-    if (error.data?.code === 'ACCOUNT_SUSPENDED') api.get('/auth/me').catch(() => {});
+    if (error.data?.code === 'ACCOUNT_SUSPENDED') api.get('/auth/me').catch(() => { });
   });
   return socket;
 }
